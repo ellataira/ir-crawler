@@ -1,6 +1,6 @@
 from urllib.parse import urlparse
-class Webpage:
-    def __init__(self, link, wave_no, score):
+class FrontierObject:
+    def __init__(self, link, wave_no, score=0):
         self.link = link
         self.inlinks = []
         self.outlinks = []
@@ -8,6 +8,6 @@ class Webpage:
         self.score = score
         self.domain = urlparse(link).netloc
 
-    # TODO calc_score
-    def calc_score(self):
+    # TODO update score
+    def update_score(self):
         self.score = 0
