@@ -1,5 +1,5 @@
 from url_normalize import url_normalize
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 
 def canonicalize(url, base_url=None):
@@ -25,6 +25,7 @@ def canonicalize(url, base_url=None):
         ret_url = ret_url[:len(ret_url) - 1]
 
     return ret_url
+
 
 
 assert canonicalize("dogs.html", "http://www.google.com") == "http://www.google.com/dogs.html"
