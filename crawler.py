@@ -19,32 +19,28 @@ class Crawler:
         self.outlinks = {} # maps url : outlinks
         self.badlinks = [""] #TODO update bad links
         self.parsed_docs = {} # map url: soup-parsed doc
+        self.PAGECOUNT = 40000
 
     # read robots.txt to see if allowed to crawl
-    def allow_crawl(self, link, rp):
+    def read_robots_txt(self, link):
+        print('entered allow crawl')
         parsed = urlparse(link)
-        url = parsed.scheme + "://" + parsed.netloc + "/robots.txt"
+        robot_url = parsed.scheme + "://" + parsed.netloc + "/robots.txt"
+        rp = RobotFileParser()
 
-        if url not in self.robot_dict:
-            rp.set_url(url)
-            rp.read()
-            self.robot_dict[url] = rp
         try:
-            cc = self.robot_dict[url].can_fetch("*")
+            rp.set_url(robot_url)
+            rp.read()
+            cc = rp.can_fetch('*', link)
         except:
             cc = False
-        return cc
 
-    def get_delay(self, url):
-        parsed = urlparse(url)
-        url = parsed.scheme + "://" + parsed.netloc + "/robots.txt"
-
-        rp = self.robot_dict[url]
-        d = rp.crawl_delay("*")
+        d = rp.crawl_delay('*')
         if d == None:
-            return 1
-        else:
-            return d
+            d = 1
+
+        return (cc, d)
+
 
     def init_frontier(self):
         seeds = ["https://en.wikipedia.org/wiki/Social_justice", "https://en.wikipedia.org/wiki/Women%27s_rights",
@@ -129,8 +125,8 @@ class Crawler:
 
     def save_docs(self, start_idx):
         idx = start_idx
-        for doc in self.parsed_docs:
-            with open("/Users/ellataira/Desktop/is4200/crawling/docs/no_" + idx + ".txt", "w") as file:
+        for url, doc in self.parsed_docs.items():
+            with open("/Users/ellataira/Desktop/is4200/crawling/docs/no_" + str(idx) + ".txt", "w") as file:
                 file.write('<DOC>\n')
                 file.write("<DOCNO>{}</DOCNO>\n".format(doc['docno']))
                 if doc['head'] != "":
@@ -146,13 +142,13 @@ class Crawler:
                 file.close()
 
     def save_dicts(self, page_count):
-        utils = Utils()
+        utils = Utils.Utils()
         base_filepath = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/"
-        utils.save_dict(base_filepath + "visited_links_at_" + page_count + "_pages.pkl", self.visited_links)
-        utils.save_dict(base_filepath + "frontier_at_"+ page_count+ "_pages.pkl" , self.frontier.frontier_obj_dict)
-        utils.save_dict(base_filepath + "inlinks_at_" + page_count + "_pages.pkl", self.inlinks)
-        utils.save_dict(base_filepath + "outlinks_at_" + page_count + "_pages.pkl", self.outlinks)
-        utils.save_dict(base_filepath + "parsed_docs_at_" + page_count + "_pages.pkl", self.parsed_docs)
+        utils.save_dict(base_filepath + "visited_links_at_" + str(page_count) + "_pages.pkl", self.visited_links)
+        utils.save_dict(base_filepath + "frontier_at_"+ str(page_count)+ "_pages.pkl" , self.frontier.frontier_obj_dict)
+        utils.save_dict(base_filepath + "inlinks_at_" + str(page_count) + "_pages.pkl", self.inlinks)
+        utils.save_dict(base_filepath + "outlinks_at_" + str(page_count) + "_pages.pkl", self.outlinks)
+        # utils.save_dict(base_filepath + "parsed_docs_at_" + str(page_count) + "_pages.pkl", self.parsed_docs) TODO cant save bc max recusrion depth
 
 
     def crawl(self):
@@ -161,26 +157,25 @@ class Crawler:
         last_delay = 0
         last_domain = None
 
-        while page_count < 40000:
+        while page_count < self.PAGECOUNT and not self.frontier.is_empty():
             score, next_frontier_obj = self.frontier.get()
             next_link = next_frontier_obj.link
 
             print(next_link)
             print("wave: " + str(next_frontier_obj.wave_no) )
-            print(page_count)
+            print("page count: " + str(page_count))
 
             # if the link has not yet been visited , check if allowed to crawl
             if next_link not in self.visited_links:
-                allow_crawl = self.allow_crawl(next_link, rp)
+                print("checking if crawl allowed / delays")
+                allow_crawl, delay = self.read_robots_txt(next_link)
+                print("can crawl = "  + str(allow_crawl))
 
                 # if allowed to crawl,
                 if allow_crawl:
-                    # get delay and wait if necesary
-                    last_delay = self.get_delay(next_link)
-
                     # only need to wait if sending request to same domain
                     if last_domain == next_frontier_obj.domain:
-                        time.sleep(last_delay)
+                        time.sleep(delay)
 
                     with requests.get(next_link) as opened:
                         cont_type = opened.headers.get('Content-Type', 0)
@@ -190,6 +185,7 @@ class Crawler:
                         if "text/html" in cont_type and language == 'en':
                             # parse webpage
                             parsed_doc = self.parse_doc(soup, next_link, opened)
+                            print("parsed doc: " + str(next_link))
 
                             # update inlink and outlink graphs, and return unseen links to add to frontier
                             # when saving, will be deriving in and out links from self.inlinks / self.outlinks ,
@@ -212,10 +208,19 @@ class Crawler:
                 self.refresh_frontier()
                 self.save_docs(page_count)
                 self.save_dicts(page_count)
+                print("refreshed and saved at " + page_count)
+
+
+        self.save_docs(page_count)
+        self.save_dicts(page_count)
+        print("exited while loop and saved")
+
+        print("terminating crawl")
 
 
 if __name__ == "__main__":
     crawler = Crawler()
     crawler.init_frontier()
+    print("init frontier")
     crawler.crawl()
 

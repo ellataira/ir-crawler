@@ -20,3 +20,9 @@ class PriorityQueue:
 
     def get_p_queue(self):
         return self.queue.queue
+
+    def is_empty(self):
+        if self.queue.qsize() == 0:
+            return True
+
+        return False
