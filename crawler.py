@@ -4,10 +4,9 @@ import requests
 import url_normalizer
 from urllib.robotparser import RobotFileParser
 from bs4 import BeautifulSoup
-import Utils
-import PriorityQueue
-
-from ir_hw3.FrontierObject import FrontierObject
+from Utils import Utils
+from PriorityQueue import PriorityQueue
+from FrontierObject import FrontierObject
 
 
 class Crawler:
@@ -17,7 +16,7 @@ class Crawler:
         self.robot_dict = {} # maps url/robots.txt : RobotFileParser
         self.inlinks = {} # maps url: inlinks
         self.outlinks = {} # maps url : outlinks
-        self.badlinks = [""] #TODO update bad links
+        self.badlinks = ["http://collectionscanada.gc.ca/ourl/res.php?rfr_id=info:sid/collectionscanada.gc.ca:pam&rft_dat=97640&url_ctx_fmt=info:ofi/fmt:kev:mtx:ctx&url_tim=2010-05-22T15:32:48Z&url_ver=Z39.88-2004"] #TODO update bad links
         self.parsed_docs = {} # map url: soup-parsed doc
         self.PAGECOUNT = 40000
 
@@ -47,7 +46,7 @@ class Crawler:
                  "https://www.unwomen.org/en/what-we-do/ending-violence-against-women",
                  "https://www.amnesty.org/en/what-we-do/discrimination/womens-rights/"]
 
-        pq = PriorityQueue.PriorityQueue()
+        pq = PriorityQueue()
         for i, s in enumerate(seeds):
             s = url_normalizer.canonicalize(s)
             new_obj = FrontierObject(s)
@@ -142,7 +141,7 @@ class Crawler:
                 file.close()
 
     def save_dicts(self, page_count):
-        utils = Utils.Utils()
+        utils = Utils()
         base_filepath = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/"
         utils.save_dict(base_filepath + "visited_links_at_" + str(page_count) + "_pages.pkl", self.visited_links)
         utils.save_dict(base_filepath + "frontier_at_"+ str(page_count)+ "_pages.pkl" , self.frontier.frontier_obj_dict)
@@ -154,7 +153,6 @@ class Crawler:
     def crawl(self):
         rp = RobotFileParser()
         page_count = 0
-        last_delay = 0
         last_domain = None
 
         while page_count < self.PAGECOUNT and not self.frontier.is_empty():
