@@ -26,3 +26,4 @@ class PriorityQueue:
             return True
 
         return False
+

@@ -1,3 +1,4 @@
+import re
 import time
 from urllib.parse import urlparse
 import requests
@@ -16,13 +17,13 @@ class Crawler:
         self.robot_dict = {} # maps url/robots.txt : RobotFileParser
         self.inlinks = {} # maps url: inlinks
         self.outlinks = {} # maps url : outlinks
-        self.badlinks = ["http://collectionscanada.gc.ca/ourl/res.php?rfr_id=info:sid/collectionscanada.gc.ca:pam&rft_dat=97640&url_ctx_fmt=info:ofi/fmt:kev:mtx:ctx&url_tim=2010-05-22T15:32:48Z&url_ver=Z39.88-2004"] #TODO update bad links
+        self.badlinks = ["collectionscanada.gc.ca"] #TODO update bad links
         self.parsed_docs = {} # map url: soup-parsed doc
-        self.PAGECOUNT = 40000
+        self.PAGECOUNT = 100
 
     # read robots.txt to see if allowed to crawl
     def read_robots_txt(self, link):
-        print('entered allow crawl')
+        print('reading robots.txt')
         parsed = urlparse(link)
         robot_url = parsed.scheme + "://" + parsed.netloc + "/robots.txt"
         rp = RobotFileParser()
@@ -31,10 +32,12 @@ class Crawler:
             rp.set_url(robot_url)
             rp.read()
             cc = rp.can_fetch('*', link)
+            print("fetched can-crawl")
         except:
             cc = False
 
         d = rp.crawl_delay('*')
+        print("fetched crawl-delay")
         if d == None:
             d = 1
 
@@ -44,7 +47,7 @@ class Crawler:
     def init_frontier(self):
         seeds = ["https://en.wikipedia.org/wiki/Social_justice", "https://en.wikipedia.org/wiki/Women%27s_rights",
                  "https://www.unwomen.org/en/what-we-do/ending-violence-against-women",
-                 "https://www.amnesty.org/en/what-we-do/discrimination/womens-rights/"]
+                 "https://www.aclu.org/issues/womens-rights"]
 
         pq = PriorityQueue()
         for i, s in enumerate(seeds):
@@ -64,12 +67,12 @@ class Crawler:
             doc['head'] = title
         except:
             doc['head'] = ""
-        doc['outlinks'] = []
+        doc['unfiltered_outlinks'] = []
         for link in soup.find_all('a'):
             try:
                 can_url = url_normalizer.canonicalize(link.get('href'))
-                if can_url not in doc['outlinks']: # remove duplicates
-                    doc['outlinks'].append(can_url)
+                if can_url not in doc['unfiltered_outlinks']: # remove duplicates
+                    doc['unfiltered_outlinks'].append(can_url)
             except:
                 pass
 
@@ -78,11 +81,12 @@ class Crawler:
 
     def update_link_graph(self, parsed_doc):
         url = parsed_doc['docno']
-        outlinks = parsed_doc['outlinks']
+        outlinks = parsed_doc['unfiltered_outlinks']
         unseen_links = []
 
         for l in outlinks:
-            if l not in self.badlinks:
+            parsed = urlparse(l)
+            if parsed.netloc not in self.badlinks:
                 l = url_normalizer.canonicalize(l, url)
                 # add outlink to url's outlink graph
                 try:
@@ -99,9 +103,6 @@ class Crawler:
                 if l not in self.visited_links:
                     unseen_links.append(l)
 
-        # update parsed doc to cleaned set of outlinks
-        parsed_doc['outlinks'] = self.outlinks[url]
-
         return unseen_links
 
     def add_to_frontier(self, unseen_links, wave):
@@ -112,12 +113,16 @@ class Crawler:
 
 
     def refresh_frontier(self):
-        new_frontier = PriorityQueue.PriorityQueue()
-        for score, url in self.frontier.get_p_queue() : #tuples (score, frontierObject)
+        new_frontier = PriorityQueue()
+        num_to_update = 1000
+        s = 0
+        for score, url in self.frontier.get_p_queue(): #tuples (score, frontierObject)
             fo = self.frontier.get_frontier_object(url)
-            fo.update_inlinks(self.inlinks[fo.link])
-            fo.update_outlinks(self.outlinks[fo.link])
-            fo.update_score()
+            if s < num_to_update: # only update the top 1000 documents (which prioritizes the most recent wave / most relevant docs
+                fo.update_inlinks(self.inlinks[fo.link])
+                fo.update_outlinks(self.outlinks[fo.link])
+                fo.update_score()
+                s += 1
             new_frontier.enqueue(fo.score, fo)
         self.frontier = new_frontier
 
@@ -131,7 +136,10 @@ class Crawler:
                 if doc['head'] != "":
                     file.write("<HEAD>{}</HEAD>\n".format(doc['head']))
                 file.write("<HEADERS>{}</HEADERS>\n".format(doc['headers']))
-                file.write("<TEXT>{}</TEXT>\n".format(doc['text']))
+                text = doc['text']
+                re.sub('\n', " ", text)
+                re.sub('\t', " ", text) # TODO stripping excess \n ???
+                file.write("<TEXT>{}</TEXT>\n".format(text))
                 file.write("<RAW_HTML>{}</RAW_HTML>\n".format(doc['raw_html']))
                 inlinks_to_str = ", ".join(self.inlinks[doc['docno']])
                 file.write("<INLINKS>{}</INLINKS>\n".format(inlinks_to_str))
@@ -175,12 +183,25 @@ class Crawler:
                     if last_domain == next_frontier_obj.domain:
                         time.sleep(delay)
 
-                    with requests.get(next_link) as opened:
-                        cont_type = opened.headers.get('Content-Type', 0)
-                        language = opened.headers.get('Content-Language',0)
+                    with requests.get(next_link, timeout=100) as opened:
                         soup = BeautifulSoup(opened.text, 'html.parser')
+                        cont_type = opened.headers.get('Content-Type')
+                        language = opened.headers.get('Content-Language')
+                        lang_soup = soup.html.get('lang')
 
-                        if "text/html" in cont_type and language == 'en':
+                        try:
+                            is_eng = True if 'en' in language else False
+                        except:
+                            # language == None
+                            is_eng = False
+
+                        is_eng = is_eng or 'en' in lang_soup
+
+                        print("language = eng ==" + str(is_eng))
+                        print("content type = " + str(cont_type))
+
+                        if "text/html" in cont_type and is_eng:
+                            print("OK to parse!")
                             # parse webpage
                             parsed_doc = self.parse_doc(soup, next_link, opened)
                             print("parsed doc: " + str(next_link))
@@ -196,13 +217,15 @@ class Crawler:
                             # add unseen links to frontier
                             wave = next_frontier_obj.wave_no + 1
                             self.add_to_frontier(unseen_links, wave)
+                            print("added new links to frontier")
 
                             # update seen links and counters
                             self.visited_links.append(next_link)
                             page_count +=1
                             last_domain = next_frontier_obj.domain
 
-            if page_count % 500 == 0 and page_count > 0 :
+
+            if page_count in [100, 500, 2500, 12500, 30000]:
                 self.refresh_frontier()
                 self.save_docs(page_count)
                 self.save_dicts(page_count)
@@ -222,3 +245,14 @@ if __name__ == "__main__":
     print("init frontier")
     crawler.crawl()
 
+"""
+- is the sleep() being applied correctly ? i think so ... 
+- how to filter out bad links 
+    - possible to timeout somewhere? 
+- bad links (insecure connections, 404, etc) 
+    => requests.exceptions.ConnectionError
+    => infinite attempt on url (gets stuck) but never times out? weird ... 
+    
+- not parsing all docs it should ... detecting english / html correctly ? 
+- how to strip excess whitespace when saving to doc .txt 
+"""
