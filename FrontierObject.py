@@ -11,9 +11,10 @@ class FrontierObject:
 
     # updates score of a webpage based on inlinks, keywords, and wave number
     def update_score(self): # priority queue will select smallest score first
-        key_words = ['social', 'justice', 'women', 'right', 'femini', 'gender', 'discriminat']
-        score = self.wave_no * 1000 # higher waves are less preferred
-        score += len(self.inlinks) * -10 # prefer pages with more inlinks
+        key_words = ['justice', 'women', 'right', 'femini', 'gender', 'discriminat', 'girl',
+                     'sexual', 'violenc', 'harrassment', 'suffrage', 'equity', 'sex', 'abortion', 'pregnancy',
+                     'autonom', 'female']
+        score = len(self.inlinks) * -10 # prefer pages with more inlinks
 
         found_keywords = []
         for k in key_words: # prefer urls with keywords

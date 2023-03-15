@@ -1,16 +1,14 @@
-import re
-import string
+import queue
 import time
-from socket import socket
 from urllib.parse import urlparse
 import requests
 import url_normalizer
 from urllib.robotparser import RobotFileParser
 from bs4 import BeautifulSoup
 from Utils import Utils
-from PriorityQueue import PriorityQueue
+from Frontier import PriorityQueue, Frontier
 from FrontierObject import FrontierObject
-from ir_hw3.Document import Document
+from Document import Document
 
 
 class Crawler:
@@ -21,9 +19,9 @@ class Crawler:
         self.inlinks = {} # maps url: inlinks
         self.outlinks = {} # maps url : outlinks
         self.badlinks = ['collectionscanada.gc.ca', 'portal.unesco.org', 'www.passports.gov.au', 'www.youtube.com', 'www.instagram.com', 'www.twitter.com',
-                         'www.google.com', 'www.facebook.com', 'www.tiktok.com', 'www.pinterest.com'] #TODO update bad links
+                         'www.google.com', 'www.facebook.com', 'www.tiktok.com', 'www.pinterest.com', 'www.anh-usa.org', 'www.cynthiawerner.com'] #TODO update bad links
         self.parsed_docs = {} # map url: soup-parsed doc
-        self.PAGECOUNT = 1000
+        self.PAGECOUNT = 40000
 
     # read robots.txt to see if allowed to crawl
     def read_robots_txt(self, link):
@@ -37,6 +35,7 @@ class Crawler:
             rp.read()
             cc = rp.can_fetch('*', link)
             print("fetched can-crawl")
+
         except:
             cc = False
 
@@ -53,14 +52,18 @@ class Crawler:
                  "https://www.unwomen.org/en/what-we-do/ending-violence-against-women",
                  "https://www.aclu.org/issues/womens-rights"]
 
-        pq = PriorityQueue()
+        f = Frontier()
+        f.add_wave(0)
+        wave0 = f.get_wave(0)
+
         for i, s_url in enumerate(seeds):
             s_url = url_normalizer.canonicalize(s_url)
             new_obj = FrontierObject(s_url)
-            pq.enqueue(new_obj.score, new_obj)  # set all scores to negative bc priorityqueue pops lowest score first
+            wave0.enqueue(new_obj.score, new_obj)  # set all scores to negative bc priorityqueue pops lowest score first
             self.inlinks[s_url] = {}
             self.outlinks[s_url] = {}
-        self.frontier = pq
+
+        self.frontier = f
 
     def parse_doc(self, soup, next_link, req_opened, page_count):
         doc = Document(soup, next_link, req_opened, page_count)
@@ -78,15 +81,15 @@ class Crawler:
 
 
     def update_link_graph(self, parsed_doc, unfiltered_outlinks):
-        print('updating link graph')
+        # print('updating link graph')
         url = parsed_doc.docno
         unseen_links = []
-        print('url: ' + url)
+        # print('url: ' + url)
 
         for l in unfiltered_outlinks:
             parsed = urlparse(l)
             if parsed.netloc not in self.badlinks and l != 'https://':
-                print('link: ' + l)
+                # print('link: ' + l)
                 # add outlink to url's outlink graph
                 try:
                     self.outlinks[url].append(l)
@@ -108,23 +111,27 @@ class Crawler:
         for link in unseen_links:
             frontier_obj = FrontierObject(link, wave, self.inlinks[link])
             frontier_obj.update_score()
-            self.frontier.enqueue(frontier_obj.score, frontier_obj)
+            wave_frontier = self.frontier.get_wave(wave)
+            wave_frontier.enqueue(frontier_obj.score, frontier_obj)
 
 
-    def refresh_frontier(self):
-        new_frontier = PriorityQueue()
-        num_to_update = 1000
+    def refresh_frontier(self, wave_no):
+        num_to_update = 250
         s = 0
-        for score, url in self.frontier.get_p_queue(): #tuples (score, frontierObject)
-            fo = self.frontier.get_frontier_object(url)
-            if s < num_to_update: # only update the top 1000 documents (which prioritizes the most recent wave / most relevant docs
+
+        wave_frontier = self.frontier.get_wave(wave_no)
+        wave_q = wave_frontier.get_queue()
+
+        for score, url in wave_q: #tuples (score, frontierObject)
+            if s < num_to_update:
+                fo = wave_frontier.get()[1] # pops highest priority item from original queue (deleting it)
                 fo.update_inlinks(self.inlinks[fo.link])
                 # no need to update outlinks bc these docs havent been parsed yet => no outlinks found
                 fo.update_score()
+                wave_frontier.enqueue(fo.score, fo)
                 s += 1
-            new_frontier.enqueue(fo.score, fo)
-        self.frontier = new_frontier
-
+            else:
+                break
 
     def save_docs(self):
         for url, doc in self.parsed_docs.items():
@@ -135,8 +142,6 @@ class Crawler:
                     file.write("<HEAD>{}</HEAD>\n".format(doc.head))
                 file.write("<HEADERS>{}</HEADERS>\n".format(doc.headers))
                 text = doc.text
-                re.sub('\n', " ", text)
-                re.sub('\t', " ", text) # TODO stripping excess \n ???
                 file.write("<TEXT>{}</TEXT>\n".format(text))
                 file.write("<RAW_HTML>{}</RAW_HTML>\n".format(doc.raw_html))
                 inlinks_to_str = ", ".join(self.inlinks[doc.docno])
@@ -153,31 +158,36 @@ class Crawler:
         utils = Utils()
         base_filepath = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/"
         utils.save_dict(base_filepath + "visited_links_at_" + str(page_count) + "_pages.pkl", self.visited_links)
-        utils.save_dict(base_filepath + "frontier_at_"+ str(page_count)+ "_pages.pkl" , self.frontier.frontier_obj_dict)
+        for waveno, wave in self.frontier.waves.items():
+            utils.save_dict(base_filepath + "frontier_at_"+ str(page_count)+ "_wave_" + str(waveno) + "_pages.pkl" , wave.frontier_obj_dict)
         utils.save_dict(base_filepath + "inlinks_at_" + str(page_count) + "_pages.pkl", self.inlinks)
         utils.save_dict(base_filepath + "outlinks_at_" + str(page_count) + "_pages.pkl", self.outlinks)
         # utils.save_dict(base_filepath + "parsed_docs_at_" + str(page_count) + "_pages.pkl", self.parsed_docs) TODO cant save bc max recusrion depth
 
 
     def crawl(self):
-        rp = RobotFileParser()
         page_count = 0
         last_domain = None
+        wave = 0
 
         while page_count < self.PAGECOUNT and not self.frontier.is_empty():
-            score, next_frontier_obj = self.frontier.get()
-            next_link = next_frontier_obj.link
+            # explore frontier by wave
+            wave_frontier = self.frontier.get_wave(wave)
 
-            print(next_link)
-            print("wave: " + str(next_frontier_obj.wave_no) )
-            print("page count: " + str(page_count))
+            # if current wave is empty, increment to next wave
+            if not wave_frontier.is_empty():
+                score, next_frontier_obj = wave_frontier.get()
+                next_link = next_frontier_obj.link
 
-            try:
+                print(next_link)
+                print("wave: " + str(next_frontier_obj.wave_no) )
+                print("page count: " + str(page_count))
+
                 # if the link has not yet been visited , check if allowed to crawl
                 if next_link not in self.visited_links:
-                    print("checking if crawl allowed / delays")
+                    # print("checking if crawl allowed / delays")
                     allow_crawl, delay = self.read_robots_txt(next_link)
-                    print("can crawl = "  + str(allow_crawl))
+                    # print("can crawl = "  + str(allow_crawl))
 
                     # if allowed to crawl,
                     if allow_crawl:
@@ -186,7 +196,7 @@ class Crawler:
                             time.sleep(delay)
 
                         try:
-                            with requests.get(next_link, timeout=100) as opened:
+                            with requests.get(next_link, timeout=2) as opened:
                                 soup = BeautifulSoup(opened.text, 'html.parser')
                                 cont_type = opened.headers.get('Content-Type')
                                 language = opened.headers.get('Content-Language')
@@ -204,8 +214,8 @@ class Crawler:
 
                                 is_eng = is_eng or lang_soup
 
-                                print("language = eng == " + str(is_eng))
-                                print("content type = " + str(cont_type))
+                                # print("language = eng == " + str(is_eng))
+                                # print("content type = " + str(cont_type))
 
                                 if "text/html" in cont_type and is_eng:
                                     print("OK to parse!")
@@ -218,32 +228,31 @@ class Crawler:
                                     # NOT from parsed_doc field
                                     unseen_links = self.update_link_graph(parsed_doc, unfiltered_outlinks)
 
-                                    # save html info to later save doc
+                                    # save html info to later save doc TODO why not just save the doc right away? that's what lecture did
                                     self.parsed_docs[parsed_doc.docno] = parsed_doc
 
                                     # add unseen links to frontier
-                                    wave = next_frontier_obj.wave_no + 1
-                                    self.add_to_frontier(unseen_links, wave)
-                                    print("added new links to frontier")
+                                    next_wave = next_frontier_obj.wave_no + 1
+                                    self.add_to_frontier(unseen_links, next_wave)
+                                    # print("added new links to frontier")
 
                                     # update seen links and counters
                                     self.visited_links.append(next_link)
-                                    page_count +=1
+                                    page_count += 1
                                     last_domain = next_frontier_obj.domain
                         except requests.exceptions.Timeout:
                             continue
 
 
-                if page_count in [100, 500, 2500, 12500, 30000]:
-                    self.refresh_frontier()
+                if page_count % 1000 == 0 and page_count > 0 :
+                    self.refresh_frontier(wave)
                     self.save_docs()
                     self.save_dicts(page_count)
                     print("refreshed and saved at " + str(page_count))
 
-            except: # in case of crash
-                print('crashed : (')
-                self.save_docs()
-                self.save_dicts(page_count)
+            else:
+                self.frontier.remove_empty_wave(wave)
+                wave += 1
 
         self.save_docs()
         self.save_dicts(page_count)

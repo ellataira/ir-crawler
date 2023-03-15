@@ -1,5 +1,3 @@
-from ir_hw3 import url_normalizer
-
 
 class Document:
 
