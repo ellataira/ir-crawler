@@ -20,7 +20,6 @@ class Crawler:
         self.outlinks = {} # maps url : outlinks
         self.badlinks = ['collectionscanada.gc.ca', 'portal.unesco.org', 'www.passports.gov.au', 'www.youtube.com', 'www.instagram.com', 'www.twitter.com',
                          'www.google.com', 'www.facebook.com', 'www.tiktok.com', 'www.pinterest.com', 'www.anh-usa.org', 'www.cynthiawerner.com'] #TODO update bad links
-        self.parsed_docs = {} # map url: soup-parsed doc
         self.PAGECOUNT = 40000
 
     # read robots.txt to see if allowed to crawl
@@ -133,26 +132,25 @@ class Crawler:
             else:
                 break
 
-    def save_docs(self):
-        for url, doc in self.parsed_docs.items():
-            with open("/Users/ellataira/Desktop/is4200/crawling/docs/no_" + str(doc.doc_idx) + ".txt", "w") as file:
-                file.write('<DOC>\n')
-                file.write("<DOCNO>{}</DOCNO>\n".format(doc.docno))
-                if doc.head != "":
-                    file.write("<HEAD>{}</HEAD>\n".format(doc.head))
-                file.write("<HEADERS>{}</HEADERS>\n".format(doc.headers))
-                text = doc.text
-                file.write("<TEXT>{}</TEXT>\n".format(text))
-                file.write("<RAW_HTML>{}</RAW_HTML>\n".format(doc.raw_html))
-                inlinks_to_str = ", ".join(self.inlinks[doc.docno])
-                file.write("<INLINKS>{}</INLINKS>\n".format(inlinks_to_str))
-                try: # some links may not yet be a key in self.outlinks if the crawling terminates before that doc is popped from frontier
-                    outlinks_to_str = ", ".join(self.outlinks[doc.docno])
-                except:
-                    outlinks_to_str = ""
-                file.write("<OUTLINKS>{}</OUTLINKS>\n".format(outlinks_to_str))
-                file.write('</DOC>\n')
-                file.close()
+    def save_doc(self, doc):
+        with open("/Users/ellataira/Desktop/is4200/crawling/docs/no_" + str(doc.doc_idx) + ".txt", "w") as file:
+            file.write('<DOC>\n')
+            file.write("<DOCNO>{}</DOCNO>\n".format(doc.docno))
+            if doc.head != "":
+                file.write("<HEAD>{}</HEAD>\n".format(doc.head))
+            file.write("<HEADERS>{}</HEADERS>\n".format(doc.headers))
+            text = doc.text
+            file.write("<TEXT>{}</TEXT>\n".format(text))
+            file.write("<RAW_HTML>{}</RAW_HTML>\n".format(doc.raw_html))
+            inlinks_to_str = ", ".join(self.inlinks[doc.docno])
+            file.write("<INLINKS>{}</INLINKS>\n".format(inlinks_to_str))
+            try: # some links may not yet be a key in self.outlinks if the crawling terminates before that doc is popped from frontier
+                outlinks_to_str = ", ".join(self.outlinks[doc.docno])
+            except:
+                outlinks_to_str = ""
+            file.write("<OUTLINKS>{}</OUTLINKS>\n".format(outlinks_to_str))
+            file.write('</DOC>\n')
+            file.close()
 
     def save_dicts(self, page_count):
         utils = Utils()
@@ -228,8 +226,8 @@ class Crawler:
                                     # NOT from parsed_doc field
                                     unseen_links = self.update_link_graph(parsed_doc, unfiltered_outlinks)
 
-                                    # save html info to later save doc TODO why not just save the doc right away? that's what lecture did
-                                    self.parsed_docs[parsed_doc.docno] = parsed_doc
+                                    # save doc TODO why not just save the doc right away? that's what lecture did
+                                    self.save_doc(parsed_doc)
 
                                     # add unseen links to frontier
                                     next_wave = next_frontier_obj.wave_no + 1
@@ -246,7 +244,6 @@ class Crawler:
 
                 if page_count % 1000 == 0 and page_count > 0 :
                     self.refresh_frontier(wave)
-                    self.save_docs()
                     self.save_dicts(page_count)
                     print("refreshed and saved at " + str(page_count))
 
@@ -254,7 +251,6 @@ class Crawler:
                 self.frontier.remove_empty_wave(wave)
                 wave += 1
 
-        self.save_docs()
         self.save_dicts(page_count)
         print("exited while loop and saved")
         print("terminating crawl")
