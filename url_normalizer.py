@@ -27,7 +27,6 @@ def canonicalize(url, base_url=None):
     return ret_url
 
 
-
 assert canonicalize("dogs.html", "http://www.google.com") == "http://www.google.com/dogs.html"
 assert canonicalize("HTTP://www.Example.com/SomeFile.html") == "http://www.example.com/SomeFile.html"
 assert canonicalize("http://www.example.com:80") == "http://www.example.com"
