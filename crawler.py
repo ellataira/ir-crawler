@@ -15,7 +15,6 @@ class Crawler:
     def __init__(self, visited_links=[], frontier=None):
         self.visited_links = visited_links
         self.frontier = frontier # custom PriorityQueue data structure based on queue.PriorityQueue: pops lowest score first
-        self.robot_dict = {} # maps url/robots.txt : RobotFileParser
         self.inlinks = {} # maps url: inlinks
         self.outlinks = {} # maps url : outlinks
         self.badlinks = ['collectionscanada.gc.ca', 'portal.unesco.org', 'www.passports.gov.au', 'www.youtube.com', 'www.instagram.com', 'www.twitter.com',
@@ -133,7 +132,7 @@ class Crawler:
                 break
 
     def save_doc(self, doc):
-        with open("/Users/ellataira/Desktop/is4200/crawling/docs/no_" + str(doc.doc_idx) + ".txt", "w") as file:
+        with open("/Users/ellataira/Desktop/is4200/crawling/docs_test/no_" + str(doc.doc_idx) + ".txt", "w") as file:
             file.write('<DOC>\n')
             file.write("<DOCNO>{}</DOCNO>\n".format(doc.docno))
             if doc.head != "":
@@ -163,10 +162,9 @@ class Crawler:
         # utils.save_dict(base_filepath + "parsed_docs_at_" + str(page_count) + "_pages.pkl", self.parsed_docs) TODO cant save bc max recusrion depth
 
 
-    def crawl(self):
-        page_count = 0
+    def crawl(self, page_count=0, wave=0):
         last_domain = None
-        wave = 0
+        already_saved = False
 
         while page_count < self.PAGECOUNT and not self.frontier.is_empty():
             # explore frontier by wave
@@ -194,7 +192,7 @@ class Crawler:
                             time.sleep(delay)
 
                         try:
-                            with requests.get(next_link, timeout=2) as opened:
+                            with requests.get(next_link, timeout=10) as opened:
                                 soup = BeautifulSoup(opened.text, 'html.parser')
                                 cont_type = opened.headers.get('Content-Type')
                                 language = opened.headers.get('Content-Language')
@@ -238,14 +236,18 @@ class Crawler:
                                     self.visited_links.append(next_link)
                                     page_count += 1
                                     last_domain = next_frontier_obj.domain
-                        except requests.exceptions.Timeout:
+                        except :
                             continue
 
 
-                if page_count % 1000 == 0 and page_count > 0 :
+                if page_count % 1000 == 0 and page_count > 0 and not already_saved:
+                    already_saved = True # so it doesn't keep saving while looking for 1001 document , etc
                     self.refresh_frontier(wave)
                     self.save_dicts(page_count)
                     print("refreshed and saved at " + str(page_count))
+
+                if page_count % 1000 == 1:
+                    already_saved = False # reset saved flag
 
             else:
                 self.frontier.remove_empty_wave(wave)
@@ -255,12 +257,70 @@ class Crawler:
         print("exited while loop and saved")
         print("terminating crawl")
 
+    def restore(self, visited_links, frontiers, inlinks, outlinks):
+        """
+        self.visited_links = visited_links
+        self.frontier = frontier # custom PriorityQueue data structure based on queue.PriorityQueue: pops lowest score first
+        self.inlinks = {} # maps url: inlinks
+        self.outlinks = {} # maps url : outlinks
+        """
+        utils = Utils()
+        # new_frontier = Frontier()
+        # for f in frontiers:
+        #     wave_frontier = utils.read_pickle(f)
+        #     terms = f.split("_")
+        #     wave_no = terms[4]
+        #     new_frontier.restore_frontier(wave_frontier, wave_no)
+        # print('restored frontier')
+        new_visited_links = utils.read_pickle(visited_links)
+        print('restored visited links')
+        new_inlinks = utils.read_pickle(inlinks)
+        print('restored inlinks')
+        new_outlinks = utils.read_pickle(outlinks)
+        print('restored outlinks')
 
-if __name__ == "__main__":
+        # self.frontier = new_frontier
+        self.visited_links = new_visited_links
+        self.inlinks = new_inlinks
+        self.outlinks = new_outlinks
+
+def restored_crawl(visited_links, frontier, inlinks, outlinks, page_count, wave_no):
+    crawler = Crawler()
+    crawler.restore(visited_links, frontier, inlinks, outlinks)
+
+    utils = Utils()
+    fs = ["/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_19000_wave_2_pages.pkl",
+          "/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_19000_wave_3_pages.pkl"]
+    nf = Frontier()
+    i = 2
+    for f in fs:
+        w2 = utils.read_pickle(f)
+        nf.restore_frontier(w2, i)
+        w = nf.waves
+        pq = nf.get_wave(i)
+        q = pq.get_queue()
+        # print(q)
+        i += 1
+
+    crawler.frontier = nf
+
+    print('ready to crawl!')
+    crawler.crawl(page_count, wave_no)
+
+def regular_crawl():
     crawler = Crawler()
     crawler.init_frontier()
     print("init frontier")
     crawler.crawl()
+
+if __name__ == "__main__":
+    # regular_crawl()
+    frontier = ["/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_12000_wave_2_pages.pkl",
+                "/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_12000_wave_3_pages.pkl"]
+    seen_links = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/visited_links_at_19000_pages.pkl"
+    inlinks = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/inlinks_at_12000_pages.pkl"
+    outlinks = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/outlinks_at_12000_pages.pkl"
+    restored_crawl(seen_links, frontier, inlinks, outlinks, 1200, 2)
 
 """
 - is the sleep() being applied correctly ? i think so ... 

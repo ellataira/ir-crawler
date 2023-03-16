@@ -1,8 +1,18 @@
 import queue
 
+from ir_hw3.Utils import Utils
+
+
 class Frontier:
     def __init__(self):
         self.waves = {}
+
+    def restore_frontier(self, url_fo_dict, wave_no):
+        pq = PriorityQueue()
+        pq.frontier_obj_dict = url_fo_dict  # set dict
+        for url, fo in url_fo_dict.items(): # set queue
+            pq.manual_enqueue(url, fo)
+        self.waves[wave_no] = pq
 
     def add_wave(self, wave_no):
         self.waves[wave_no] = PriorityQueue()
@@ -36,10 +46,14 @@ class PriorityQueue:
         t = (score, frontier_obj.link)
         self.queue.put(t)
 
+    def manual_enqueue(self, url, fo):
+        score = fo.score
+        self.queue.put((score, url))
+
     def get(self):
         score, next_url = self.queue.get()
         ret_obj = self.frontier_obj_dict[next_url]
-        del self.frontier_obj_dict[next_url] # delete from dict once popped
+        # del self.frontier_obj_dict[next_url] # delete from dict once popped
         return score, ret_obj
 
     def get_frontier_object(self, url):
@@ -53,4 +67,19 @@ class PriorityQueue:
             return True
 
         return False
+#
+# utils = Utils()
+# fs = ["/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_19000_wave_2_pages.pkl",
+#                 "/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_19000_wave_3_pages.pkl"]
+# nf = Frontier()
+# i = 2
+# for f in fs:
+#     w2 = utils.read_pickle(f)
+#     nf.restore_frontier(w2, i)
+#     w = nf.waves
+#     pq = nf.get_wave(i)
+#     q = pq.get_queue()
+#     print(q)
+#     i+=1
+
 

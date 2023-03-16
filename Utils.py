@@ -17,4 +17,3 @@ class Utils:
         dict = pickle.load(infile)
         infile.close()
         return dict
-
