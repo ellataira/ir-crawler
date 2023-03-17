@@ -9,7 +9,14 @@ from Utils import Utils
 from Frontier import PriorityQueue, Frontier
 from FrontierObject import FrontierObject
 from Document import Document
+import signal
+import time
 
+class Timeout(Exception):
+    pass
+
+def handler(sig, frame):
+    raise Timeout
 
 class Crawler:
     def __init__(self, visited_links=[], frontier=None):
@@ -18,11 +25,16 @@ class Crawler:
         self.inlinks = {} # maps url: inlinks
         self.outlinks = {} # maps url : outlinks
         self.badlinks = ['collectionscanada.gc.ca', 'portal.unesco.org', 'www.passports.gov.au', 'www.youtube.com', 'www.instagram.com', 'www.twitter.com',
-                         'www.google.com', 'www.facebook.com', 'www.tiktok.com', 'www.pinterest.com', 'www.anh-usa.org', 'www.cynthiawerner.com', 'weli.pedsanesthesia.org', 'dfat.gov.au'] #TODO update bad links
+                         'www.google.com', 'www.facebook.com', 'www.tiktok.com', 'www.pinterest.com', 'www.anh-usa.org', 'www.cynthiawerner.com', 'weli.pedsanesthesia.org',
+                         'www.dfat.gov.au', 'www.ag.gov.au', 'www.dhakacourier.com.bd'] #TODO update bad links
         self.PAGECOUNT = 40000
+        self.SAVEAT = 500
 
     # read robots.txt to see if allowed to crawl
     def read_robots_txt(self, link):
+
+        signal.signal(signal.SIGALRM, handler)  # register interest in SIGALRM events
+
         print('reading robots.txt')
         parsed = urlparse(link)
         robot_url = parsed.scheme + "://" + parsed.netloc + "/robots.txt"
@@ -32,12 +44,12 @@ class Crawler:
             d = 1
             cc = False
         else:
+            signal.alarm(180)  # timeout in 3 mins
             try:
                 rp.set_url(robot_url)
                 rp.read()
                 cc = rp.can_fetch('*', link)
                 print("fetched can-crawl")
-
             except:
                 cc = False
 
@@ -176,81 +188,84 @@ class Crawler:
 
             # if current wave is empty, increment to next wave
             if not wave_frontier.is_empty():
-                score, next_frontier_obj = wave_frontier.get()
-                next_link = next_frontier_obj.link
+                try:
+                    score, next_frontier_obj = wave_frontier.get()
+                    next_link = next_frontier_obj.link
 
-                print(next_link)
-                print("wave: " + str(next_frontier_obj.wave_no) )
-                print("page count: " + str(page_count))
+                    print(next_link)
+                    print("wave: " + str(next_frontier_obj.wave_no) )
+                    print("page count: " + str(page_count))
 
-                # if the link has not yet been visited , check if allowed to crawl
-                if next_link not in self.visited_links:
-                    self.visited_links.append(next_link)
-                    # print("checking if crawl allowed / delays")
-                    allow_crawl, delay = self.read_robots_txt(next_link)
-                    # print("can crawl = "  + str(allow_crawl))
+                    # if the link has not yet been visited , check if allowed to crawl
+                    if next_link not in self.visited_links:
+                        self.visited_links.append(next_link)
+                        # print("checking if crawl allowed / delays")
+                        allow_crawl, delay = self.read_robots_txt(next_link)
+                        # print("can crawl = "  + str(allow_crawl))
 
-                    # if allowed to crawl,
-                    if allow_crawl:
-                        # only need to wait if sending request to same domain
-                        if last_domain == next_frontier_obj.domain:
-                            time.sleep(delay)
+                        # if allowed to crawl,
+                        if allow_crawl:
+                            # only need to wait if sending request to same domain
+                            if last_domain == next_frontier_obj.domain:
+                                time.sleep(delay)
 
-                        try:
-                            with requests.get(next_link, timeout=10) as opened:
-                                soup = BeautifulSoup(opened.text,'html.parser')
-                                cont_type = opened.headers.get('Content-Type')
-                                language = opened.headers.get('Content-Language')
+                            try:
+                                with requests.get(next_link, timeout=10) as opened:
+                                    soup = BeautifulSoup(opened.text,'html.parser')
+                                    cont_type = opened.headers.get('Content-Type')
+                                    language = opened.headers.get('Content-Language')
 
-                                try:
-                                    lang_soup = True if 'en' in soup.html.get('lang', '') else False
-                                except:
-                                    lang_soup = False
+                                    try:
+                                        lang_soup = True if 'en' in soup.html.get('lang', '') else False
+                                    except:
+                                        lang_soup = False
 
-                                try:
-                                    is_eng = True if 'en' in language else False
-                                except:
-                                    # language == None
-                                    is_eng = False
+                                    try:
+                                        is_eng = True if 'en' in language else False
+                                    except:
+                                        # language == None
+                                        is_eng = False
 
-                                is_eng = is_eng or lang_soup
+                                    is_eng = is_eng or lang_soup
 
-                                # print("language = eng == " + str(is_eng))
-                                # print("content type = " + str(cont_type))
+                                    # print("language = eng == " + str(is_eng))
+                                    # print("content type = " + str(cont_type))
 
-                                if "text/html" in cont_type and is_eng:
-                                    print("OK to parse!")
-                                    # parse webpage
-                                    parsed_doc, unfiltered_outlinks = self.parse_doc(soup, next_link, opened, page_count)
-                                    print("parsed doc: " + str(next_link))
+                                    if "text/html" in cont_type and is_eng:
+                                        print("OK to parse!")
+                                        # parse webpage
+                                        parsed_doc, unfiltered_outlinks = self.parse_doc(soup, next_link, opened, page_count)
+                                        print("parsed doc: " + str(next_link))
 
-                                    # update inlink and outlink graphs, and return unseen links to add to frontier
-                                    # when saving, will be deriving in and out links from self.inlinks / self.outlinks ,
-                                    # NOT from parsed_doc field
-                                    unseen_links = self.update_link_graph(parsed_doc, unfiltered_outlinks)
+                                        # update inlink and outlink graphs, and return unseen links to add to frontier
+                                        # when saving, will be deriving in and out links from self.inlinks / self.outlinks ,
+                                        # NOT from parsed_doc field
+                                        unseen_links = self.update_link_graph(parsed_doc, unfiltered_outlinks)
 
-                                    # save doc TODO why not just save the doc right away? that's what lecture did
-                                    self.save_doc(parsed_doc)
+                                        # save doc TODO why not just save the doc right away? that's what lecture did
+                                        self.save_doc(parsed_doc)
 
-                                    # add unseen links to frontier
-                                    next_wave = next_frontier_obj.wave_no + 1
-                                    self.add_to_frontier(unseen_links, next_wave)
-                                    # print("added new links to frontier")
+                                        # add unseen links to frontier
+                                        next_wave = next_frontier_obj.wave_no + 1
+                                        self.add_to_frontier(unseen_links, next_wave)
+                                        # print("added new links to frontier")
 
-                                    # update counters
-                                    page_count += 1
-                                    last_domain = next_frontier_obj.domain
-                        except :
-                            continue
+                                        # update counters
+                                        page_count += 1
+                                        last_domain = next_frontier_obj.domain
+                            except :
+                                continue
+                except:
+                    continue
 
 
-                if page_count % 1000 == 0 and page_count > 0 and not already_saved:
+                if page_count % self.SAVEAT == 0 and page_count > 0 and not already_saved:
                     already_saved = True # so it doesn't keep saving while looking for 1001 document , etc
                     self.refresh_frontier(wave)
                     self.save_dicts(page_count)
                     print("refreshed and saved at " + str(page_count))
 
-                if page_count % 1000 == 1:
+                if page_count % self.SAVEAT == 1:
                     already_saved = False # reset saved flag
 
             else:
