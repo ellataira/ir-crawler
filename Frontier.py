@@ -1,8 +1,5 @@
 import queue
 
-from ir_hw3.Utils import Utils
-
-
 class Frontier:
     def __init__(self):
         self.waves = {}

@@ -18,7 +18,7 @@ class Crawler:
         self.inlinks = {} # maps url: inlinks
         self.outlinks = {} # maps url : outlinks
         self.badlinks = ['collectionscanada.gc.ca', 'portal.unesco.org', 'www.passports.gov.au', 'www.youtube.com', 'www.instagram.com', 'www.twitter.com',
-                         'www.google.com', 'www.facebook.com', 'www.tiktok.com', 'www.pinterest.com', 'www.anh-usa.org', 'www.cynthiawerner.com'] #TODO update bad links
+                         'www.google.com', 'www.facebook.com', 'www.tiktok.com', 'www.pinterest.com', 'www.anh-usa.org', 'www.cynthiawerner.com', 'weli.pedsanesthesia.org', 'dfat.gov.au'] #TODO update bad links
         self.PAGECOUNT = 40000
 
     # read robots.txt to see if allowed to crawl
@@ -28,19 +28,23 @@ class Crawler:
         robot_url = parsed.scheme + "://" + parsed.netloc + "/robots.txt"
         rp = RobotFileParser()
 
-        try:
-            rp.set_url(robot_url)
-            rp.read()
-            cc = rp.can_fetch('*', link)
-            print("fetched can-crawl")
-
-        except:
-            cc = False
-
-        d = rp.crawl_delay('*')
-        print("fetched crawl-delay")
-        if d == None:
+        if parsed.netloc in self.badlinks:
             d = 1
+            cc = False
+        else:
+            try:
+                rp.set_url(robot_url)
+                rp.read()
+                cc = rp.can_fetch('*', link)
+                print("fetched can-crawl")
+
+            except:
+                cc = False
+
+            d = rp.crawl_delay('*')
+            print("fetched crawl-delay")
+            if d == None:
+                d = 1
 
         return (cc, d)
 
@@ -132,7 +136,7 @@ class Crawler:
                 break
 
     def save_doc(self, doc):
-        with open("/Users/ellataira/Desktop/is4200/crawling/docs_test/no_" + str(doc.doc_idx) + ".txt", "w") as file:
+        with open("/Users/ellataira/Desktop/is4200/crawling/docs/no_" + str(doc.doc_idx) + ".txt", "w") as file:
             file.write('<DOC>\n')
             file.write("<DOCNO>{}</DOCNO>\n".format(doc.docno))
             if doc.head != "":
@@ -181,6 +185,7 @@ class Crawler:
 
                 # if the link has not yet been visited , check if allowed to crawl
                 if next_link not in self.visited_links:
+                    self.visited_links.append(next_link)
                     # print("checking if crawl allowed / delays")
                     allow_crawl, delay = self.read_robots_txt(next_link)
                     # print("can crawl = "  + str(allow_crawl))
@@ -193,7 +198,7 @@ class Crawler:
 
                         try:
                             with requests.get(next_link, timeout=10) as opened:
-                                soup = BeautifulSoup(opened.text, 'html.parser')
+                                soup = BeautifulSoup(opened.text,'html.parser')
                                 cont_type = opened.headers.get('Content-Type')
                                 language = opened.headers.get('Content-Language')
 
@@ -232,8 +237,7 @@ class Crawler:
                                     self.add_to_frontier(unseen_links, next_wave)
                                     # print("added new links to frontier")
 
-                                    # update seen links and counters
-                                    self.visited_links.append(next_link)
+                                    # update counters
                                     page_count += 1
                                     last_domain = next_frontier_obj.domain
                         except :
@@ -289,8 +293,8 @@ def restored_crawl(visited_links, frontier, inlinks, outlinks, page_count, wave_
     crawler.restore(visited_links, frontier, inlinks, outlinks)
 
     utils = Utils()
-    fs = ["/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_19000_wave_2_pages.pkl",
-          "/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_19000_wave_3_pages.pkl"]
+    fs = ["/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_28000_wave_2_pages.pkl",
+          "/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_28000_wave_3_pages.pkl"]
     nf = Frontier()
     i = 2
     for f in fs:
@@ -315,12 +319,12 @@ def regular_crawl():
 
 if __name__ == "__main__":
     # regular_crawl()
-    frontier = ["/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_12000_wave_2_pages.pkl",
-                "/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_12000_wave_3_pages.pkl"]
-    seen_links = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/visited_links_at_19000_pages.pkl"
-    inlinks = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/inlinks_at_12000_pages.pkl"
-    outlinks = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/outlinks_at_12000_pages.pkl"
-    restored_crawl(seen_links, frontier, inlinks, outlinks, 1200, 2)
+    frontier = ["/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_28000_wave_2_pages.pkl",
+                "/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_28000_wave_3_pages.pkl"]
+    seen_links = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/visited_links_at_28000_pages.pkl"
+    inlinks = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/inlinks_at_28000_pages.pkl"
+    outlinks = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/outlinks_at_28000_pages.pkl"
+    restored_crawl(seen_links, frontier, inlinks, outlinks, 28000, 2)
 
 """
 - is the sleep() being applied correctly ? i think so ... 
