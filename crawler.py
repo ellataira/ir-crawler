@@ -308,8 +308,8 @@ def restored_crawl(visited_links, frontier, inlinks, outlinks, page_count, wave_
     crawler.restore(visited_links, frontier, inlinks, outlinks)
 
     utils = Utils()
-    fs = ["/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_28000_wave_2_pages.pkl",
-          "/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_28000_wave_3_pages.pkl"]
+    fs = ["/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_38500_wave_2_pages.pkl",
+          "/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_38500_wave_3_pages.pkl"]
     nf = Frontier()
     i = 2
     for f in fs:
@@ -334,12 +334,12 @@ def regular_crawl():
 
 if __name__ == "__main__":
     # regular_crawl()
-    frontier = ["/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_28000_wave_2_pages.pkl",
-                "/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_28000_wave_3_pages.pkl"]
-    seen_links = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/visited_links_at_28000_pages.pkl"
-    inlinks = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/inlinks_at_28000_pages.pkl"
-    outlinks = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/outlinks_at_28000_pages.pkl"
-    restored_crawl(seen_links, frontier, inlinks, outlinks, 28000, 2)
+    frontier = ["/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_38500_wave_2_pages.pkl",
+                "/Users/ellataira/Desktop/is4200/crawling/dict_backup/frontier_at_38500_wave_3_pages.pkl"]
+    seen_links = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/visited_links_at_38500_pages.pkl"
+    inlinks = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/inlinks_at_38500_pages.pkl"
+    outlinks = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/outlinks_at_38500_pages.pkl"
+    restored_crawl(seen_links, frontier, inlinks, outlinks, 38500, 2)
 
 """
 - is the sleep() being applied correctly ? i think so ... 
