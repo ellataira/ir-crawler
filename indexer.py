@@ -14,13 +14,23 @@ TEXT_REGEX = re.compile("<TEXT>.*?</TEXT>", re.DOTALL)
 INLINKS_REGEX = re.compile("<INLINKS>.*?</INLINKS>")
 OUTLINKS_REGEX = re.compile("<OUTLINKS>.*?</OUTLINKS>")
 
+""""
+user = elastic
+pw = 74QCRsRmX0WpC67mIj0PZfDw
+"""
+
+INDEX = 'homework3'
+CLOUD_ID = 'homework3:dXMtY2VudHJhbDEuZ2NwLmNsb3VkLmVzLmlvOjQ0MyQ3NjJhZDM3NTU4MTY0OWM1ODM3ZTRiYjg5NjI5ZmFiNyQyMWU0ZDM1MDQzNmY0NDA3OGIzZTY0NTMyN2Q0NTUzNg=='
+DOCUMENT_FOLDER = '/Users/ellataira/Desktop/is4200/crawling/docs'
 class Indexer:
 
     def __init__(self, index):
         self.index = index
 
 
-    def create_index(self):
+    def create_index(self, es):
+        # es.indices.delete(index=INDEX, ignore=[404, 400])
+
         index_json = {
             'settings':{
                 'number_of_shards':1,
@@ -56,65 +66,59 @@ class Indexer:
             }
         }
 
-        esclient.indices.create(index=self.index, body=request_body)
+        es.indices.create(index=self.index, body=index_json)
 
     def merge_and_index(self, inlinks, url, outlinks, body, author, es):
 
-        ret = {
-            '_id': url,
-            'content': body,
-            'inlinks': inlinks,
-            'outlinks':outlinks,
-            'author': author
-        }
-
-        '''
-        do i need the the full query to find if doc exists, or can i use es.exists(index=self.index, id=url)
-        query = {
-                'query': {
-                    'exists': {
-                        '_id': url
-                    }
-                }
-            }
-        '''
-
+        resp = ""
         # TODO is it _id or id
         if es.exists(index=self.index, id=url):
             # TODO update existing index item to add new in/outlinks and author
             # get all existing data under url
 
             to_update = es.get(index=self.index, id=url)
-            old_inlinks = to_update['inlinks']
-            old_outlinks= to_update['outlinks']
-            old_author = to_update['author']
 
-            # update item in index with new data
-            # add non-duplicate links
-            new_inlinks = self.update(old_inlinks, inlinks)
-            new_outlinks = self.update(old_outlinks, outlinks)
-            new_author = self.update(old_author, author)
+            old_inlinks = to_update['_source']['inlinks']
+            old_outlinks= to_update['_source']['outlinks']
+            old_author = to_update['_source']['author']
 
-            # TODO what's the difference btw insert_body and ret ... supposed to be updating ret instead?!
-            insert_body = {
-                'content': body,
-                'inlinks': new_inlinks,
-                'outlinks': new_outlinks,
-                'author': new_author
-            }
+            if old_author == "Ella":
+                pass
+            else:
+                # update item in index with new data
+                # add non-duplicate links
+                new_inlinks = self.update(old_inlinks, inlinks)
+                new_outlinks = self.update(old_outlinks, outlinks)
+                new_author = self.update(old_author, author)
 
-            resp = es.update(index=self.index, id=url, body=insert_body)
+                # TODO what's the difference btw insert_body and ret ... supposed to be updating ret instead?!
+                insert_body = {
+                    'doc':{
+                        'inlinks': new_inlinks,
+                        'outlinks': new_outlinks,
+                        'author': new_author
+                    }
+                }
+                try:
+                    resp = es.update(index=self.index, id=url, body=insert_body)
+                    print("merged\n")
+                except:
+                    pass
 
 
         else:
             insert_body = {
                 'content': body,
-                'inlinks': inlinks,
-                'outlinks': outlinks,
-                'author': author
+                'inlinks': inlinks,     # joined inlinks with ", "
+                'outlinks': outlinks,   # joined outlinks with ", "
+                'author': author        # joined authors with ", "
             }
+            try:
+                resp = es.index(index= self.index, body=insert_body, id=url)
+                print("indexed: " + url)
+            except:
+                pass
 
-            resp = es.index(index= self.index, body=insert_body, id=url)
 
         return resp
 
@@ -145,7 +149,7 @@ class Indexer:
                 docno = re.sub("(<DOCNO>)|(</DOCNO>)", "", found_doc[0])
 
                 found_text = re.search(TEXT_REGEX, doc)
-                text = re.sub("(<TEXT>\n)|(\n</TEXT>)", "", found_text[0])
+                text = re.sub("(<TEXT>\n)|(\n</TEXT>)|(<TEXT>)|(</TEXT>)", "", found_text[0])
                 text = re.sub("\n", " ", text)
 
                 found_inlinks =  re.search(INLINKS_REGEX, doc)
@@ -154,10 +158,6 @@ class Indexer:
                 found_outlinks = re.search(OUTLINKS_REGEX, doc)
                 outlinks = re.sub("(<OUTLINKS>)|(</OUTLINKS>)", "", found_outlinks[0])
 
-            print(docno) #TODO should we strip the https:// to save space?
-            print(text)
-            print(inlinks)
-            print(outlinks)
             return docno, text, inlinks, outlinks, "Ella"
 
 
@@ -165,9 +165,7 @@ class Indexer:
     def open_dir_and_merge_index(self, es, document_folder) :
 
         entries = os.listdir(document_folder)
-        id = 0
 
-        print(id)
         # for every 'ap....' file in the opened directory, parse it for documents
         for entry in entries:
             # parse txt file for all info
@@ -176,15 +174,10 @@ class Indexer:
             # merge and index with elasticsearch
             self.merge_and_index(inlinks, docid, outlinks, body, author, es)
 
-# if __name__ == '__main__':
-#     es = Elasticsearch("http://localhost:9200")
-#     INDEX = ""
-#     indexer = Indexer(INDEX)
-#     # init index
-#     indexer.create_index()
-#     indexer.open_dir_and_merge_index(es, document_folder)
-#
 
-fp ="/Users/ellataira/Desktop/is4200/crawling/docs/no_0.txt"
-i = Indexer("")
-i.parse(fp)
+if __name__ == '__main__':
+    es = Elasticsearch(request_timeout = 1000, cloud_id = CLOUD_ID, http_auth= ('elastic', '74QCRsRmX0WpC67mIj0PZfDw'))
+    indexer = Indexer(INDEX)
+    # init index
+    # indexer.create_index(es)
+    indexer.open_dir_and_merge_index(es, DOCUMENT_FOLDER)
