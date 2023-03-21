@@ -1,9 +1,8 @@
 from url_normalize import url_normalize
 from urllib.parse import urljoin, urlparse
 
-
+# canonicalizes a given url, and appends it to the base url if given
 def canonicalize(url, base_url=None):
-    # TODO : dependent on how relative urls are written
     if base_url:
         url = urljoin(base_url, url)
 

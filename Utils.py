@@ -12,6 +12,7 @@ class Utils:
         file.close()
         print("saved dictionary to " + filename + "\n")
 
+    # converts .pkl to dictionary
     def read_pickle(self, filepath):
         infile = open(filepath, 'rb')
         dict = pickle.load(infile)

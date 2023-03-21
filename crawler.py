@@ -12,12 +12,14 @@ from Document import Document
 import signal
 import time
 
+"""Timeout exception to prevent crawler from wasting too much time on a single url"""
 class Timeout(Exception):
     pass
 
 def handler(sig, frame):
     raise Timeout
 
+"""topical web crawler """
 class Crawler:
     def __init__(self, visited_links=[], frontier=None):
         self.visited_links = visited_links
@@ -61,6 +63,7 @@ class Crawler:
         return (cc, d)
 
 
+    # initializes wave 0 of frontier with seed links
     def init_frontier(self):
         seeds = ["https://en.wikipedia.org/wiki/Social_justice", "https://en.wikipedia.org/wiki/Women%27s_rights",
                  "https://www.unwomen.org/en/what-we-do/ending-violence-against-women",
@@ -79,6 +82,7 @@ class Crawler:
 
         self.frontier = f
 
+    # parses a single webpage for all of its links
     def parse_doc(self, soup, next_link, req_opened, page_count):
         doc = Document(soup, next_link, req_opened, page_count)
 
@@ -93,7 +97,7 @@ class Crawler:
 
         return doc, unfiltered_outlinks
 
-
+    # updates the inlink and outlink dictionaries with new links found in a parsed webpage
     def update_link_graph(self, parsed_doc, unfiltered_outlinks):
         # print('updating link graph')
         url = parsed_doc.docno
@@ -121,6 +125,7 @@ class Crawler:
 
         return unseen_links
 
+    # for every new link, creates a FrontierObject, scores it, and adds to priority queue frontier at given wave
     def add_to_frontier(self, unseen_links, wave):
         for link in unseen_links:
             frontier_obj = FrontierObject(link, wave, self.inlinks[link])
@@ -128,7 +133,7 @@ class Crawler:
             wave_frontier = self.frontier.get_wave(wave)
             wave_frontier.enqueue(frontier_obj.score, frontier_obj)
 
-
+    # refreshes partial frontier entries by rescoring with updated inlink counts
     def refresh_frontier(self, wave_no):
         num_to_update = 250
         s = 0
@@ -147,6 +152,16 @@ class Crawler:
             else:
                 break
 
+    """
+    saves a webpage as .txt file with the following fields:
+        docno = canonicalized url 
+        doc.head
+        doc.headers
+        doc.text (<p> </p>)
+        raw html 
+        inlinks 
+        outlinks 
+    """
     def save_doc(self, doc):
         with open("/Users/ellataira/Desktop/is4200/crawling/docs/no_" + str(doc.doc_idx) + ".txt", "w") as file:
             file.write('<DOC>\n')
@@ -167,6 +182,7 @@ class Crawler:
             file.write('</DOC>\n')
             file.close()
 
+    # saves partial data of visited links, frontier, inlinks, and outlinks in order to back-up before potential crashes
     def save_dicts(self, page_count):
         utils = Utils()
         base_filepath = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/"
@@ -175,9 +191,8 @@ class Crawler:
             utils.save_dict(base_filepath + "frontier_at_"+ str(page_count)+ "_wave_" + str(waveno) + "_pages.pkl" , wave.frontier_obj_dict)
         utils.save_dict(base_filepath + "inlinks_at_" + str(page_count) + "_pages.pkl", self.inlinks)
         utils.save_dict(base_filepath + "outlinks_at_" + str(page_count) + "_pages.pkl", self.outlinks)
-        # utils.save_dict(base_filepath + "parsed_docs_at_" + str(page_count) + "_pages.pkl", self.parsed_docs) TODO cant save bc max recusrion depth
 
-
+    # main crawling method will crawl for 40,000 relevant documents and update frontier for each new page crawled
     def crawl(self, page_count=0, wave=0):
         last_domain = None
         already_saved = False
@@ -242,7 +257,7 @@ class Crawler:
                                         # NOT from parsed_doc field
                                         unseen_links = self.update_link_graph(parsed_doc, unfiltered_outlinks)
 
-                                        # save doc TODO why not just save the doc right away? that's what lecture did
+                                        # save doc
                                         self.save_doc(parsed_doc)
 
                                         # add unseen links to frontier
@@ -276,21 +291,9 @@ class Crawler:
         print("exited while loop and saved")
         print("terminating crawl")
 
-    def restore(self, visited_links, frontiers, inlinks, outlinks):
-        """
-        self.visited_links = visited_links
-        self.frontier = frontier # custom PriorityQueue data structure based on queue.PriorityQueue: pops lowest score first
-        self.inlinks = {} # maps url: inlinks
-        self.outlinks = {} # maps url : outlinks
-        """
+    # restores crawler based on backed-up partial visited links, inlinks, and outlinks
+    def restore(self, visited_links, inlinks, outlinks):
         utils = Utils()
-        # new_frontier = Frontier()
-        # for f in frontiers:
-        #     wave_frontier = utils.read_pickle(f)
-        #     terms = f.split("_")
-        #     wave_no = terms[4]
-        #     new_frontier.restore_frontier(wave_frontier, wave_no)
-        # print('restored frontier')
         new_visited_links = utils.read_pickle(visited_links)
         print('restored visited links')
         new_inlinks = utils.read_pickle(inlinks)
@@ -303,6 +306,7 @@ class Crawler:
         self.inlinks = new_inlinks
         self.outlinks = new_outlinks
 
+# resumes crawler from backed-up data (partial frontier, inlinks, outlinks, and visited_docs) at given wave number and page count
 def restored_crawl(visited_links, frontier, inlinks, outlinks, page_count, wave_no):
     crawler = Crawler()
     crawler.restore(visited_links, frontier, inlinks, outlinks)
@@ -326,6 +330,7 @@ def restored_crawl(visited_links, frontier, inlinks, outlinks, page_count, wave_
     print('ready to crawl!')
     crawler.crawl(page_count, wave_no)
 
+# inits web crawler starting at 0 docs crawled (starting from seed docs)
 def regular_crawl():
     crawler = Crawler()
     crawler.init_frontier()
@@ -340,15 +345,3 @@ if __name__ == "__main__":
     inlinks = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/inlinks_at_38500_pages.pkl"
     outlinks = "/Users/ellataira/Desktop/is4200/crawling/dict_backup/outlinks_at_38500_pages.pkl"
     restored_crawl(seen_links, frontier, inlinks, outlinks, 38500, 2)
-
-"""
-- is the sleep() being applied correctly ? i think so ... 
-- how to filter out bad links 
-    - possible to timeout somewhere? 
-- bad links (insecure connections, 404, etc) 
-    => requests.exceptions.ConnectionError
-    => infinite attempt on url (gets stuck) but never times out? weird ... 
-    
-- not parsing all docs it should ... detecting english / html correctly ? 
-- how to strip excess whitespace when saving to doc .txt 
-"""

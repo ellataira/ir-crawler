@@ -1,5 +1,7 @@
 import re
 from urllib.parse import urlparse
+
+# represents a single item in the frontier
 class FrontierObject:
     def __init__(self, link, wave_no=0, inlinks={}, outlinks={}, score=0):
         self.link = link
@@ -24,8 +26,10 @@ class FrontierObject:
         score += len(found_keywords) * -10
         self.score = score
 
+    # updates stored inlinks
     def update_inlinks(self, inlinks):
         self.inlinks = inlinks
 
+    # updates stored outlinks
     def update_outlinks(self, outlinks):
         self.outlinks = outlinks

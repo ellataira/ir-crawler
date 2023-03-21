@@ -1,4 +1,4 @@
-
+# Represents a single webpage to be stored as a document
 class Document:
 
     def __init__(self, soup, next_link, req_opened, doc_idx):

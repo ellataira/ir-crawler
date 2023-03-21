@@ -27,9 +27,9 @@ class Indexer:
     def __init__(self, index):
         self.index = index
 
-
+    # instantiates elasticsearch index
     def create_index(self, es):
-        # es.indices.delete(index=INDEX, ignore=[404, 400])
+        es.indices.delete(index=INDEX, ignore=[404, 400])
 
         index_json = {
             'settings':{
@@ -68,42 +68,44 @@ class Indexer:
 
         es.indices.create(index=self.index, body=index_json)
 
-    def merge_and_index(self, inlinks, url, outlinks, body, author, es):
-
+    # for a given document, adds to ES index, or merges with existing index entry
+    def merge_and_index(self, inlinks, url, outlinks, body, author, es, count):
         resp = ""
+        print(count)
         # TODO is it _id or id
-        if es.exists(index=self.index, id=url):
+        if es.exists(index=self.index, id=url, request_timeout=100):
+            print("already exists")
             # TODO update existing index item to add new in/outlinks and author
             # get all existing data under url
+            try:
+                to_update = es.get(index=self.index, id=url, request_timeout=100)
 
-            to_update = es.get(index=self.index, id=url)
+                old_inlinks = to_update['_source']['inlinks']
+                old_outlinks= to_update['_source']['outlinks']
+                old_author = to_update['_source']['author']
 
-            old_inlinks = to_update['_source']['inlinks']
-            old_outlinks= to_update['_source']['outlinks']
-            old_author = to_update['_source']['author']
-
-            if old_author == "Ella":
-                pass
-            else:
-                # update item in index with new data
-                # add non-duplicate links
-                new_inlinks = self.update(old_inlinks, inlinks)
-                new_outlinks = self.update(old_outlinks, outlinks)
-                new_author = self.update(old_author, author)
-
-                # TODO what's the difference btw insert_body and ret ... supposed to be updating ret instead?!
-                insert_body = {
-                    'doc':{
-                        'inlinks': new_inlinks,
-                        'outlinks': new_outlinks,
-                        'author': new_author
-                    }
-                }
-                try:
-                    resp = es.update(index=self.index, id=url, body=insert_body)
-                    print("merged\n")
-                except:
+                if old_author == "Ella":
                     pass
+                else:
+                    # update item in index with new data
+                    # add non-duplicate links
+                    new_inlinks = self.update(old_inlinks, inlinks)
+                    new_outlinks = self.update(old_outlinks, outlinks)
+                    new_author = self.update(old_author, author)
+
+                    # TODO what's the difference btw insert_body and ret ... supposed to be updating ret instead?!
+                    insert_body = {
+                        'doc':{
+                            'inlinks': new_inlinks,
+                            'outlinks': new_outlinks,
+                            'author': new_author
+                        }
+                    }
+                    resp = es.update(index=self.index, id=url, body=insert_body, request_timeout=100)
+                    print("merged\n")
+
+            except:
+                pass
 
 
         else:
@@ -165,14 +167,17 @@ class Indexer:
     def open_dir_and_merge_index(self, es, document_folder) :
 
         entries = os.listdir(document_folder)
+        count = 0
 
         # for every 'ap....' file in the opened directory, parse it for documents
         for entry in entries:
             # parse txt file for all info
             filepath = document_folder + "/" + entry
+            print(entry)
             docid, body, inlinks, outlinks, author = self.parse(filepath)
             # merge and index with elasticsearch
-            self.merge_and_index(inlinks, docid, outlinks, body, author, es)
+            self.merge_and_index(inlinks, docid, outlinks, body, author, es, count)
+            count+=1
 
 
 if __name__ == '__main__':
